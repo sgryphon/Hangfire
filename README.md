@@ -110,6 +110,37 @@ using (new BackgroundJobServer())
 }
 ```
 
+Observability
+-------------
+
+**Open Telemetry**
+
+OpenTelemetry is an open-source standard for distributed tracing, which allows you to collect and analyze data about the performance of your systems. Hangfire can be configured to use OpenTelemetry to instrument message handling, so that you can collect telemetry data about messages as they flow through your system.
+
+Hangfire is instrumented to start a Producer activity when either a recurring job or background job is scheduled, and start a Consumer activity when a job runs. The distributed trace correlation information of the creation context is persisted with the job and used for the consumer (even if run on a different server), allows jobs to be correlated.
+
+For more information see: <https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/>
+
+**Tracing**
+
+This example is using following packages:
+- `OpenTelemetry.Extensions.Hosting`
+- `OpenTelemetry.Exporter.Console`
+
+```csharp
+using OpenTelemetry.Trace;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(b => b
+        .AddSource(DiagnosticHeaders.DefaultListenerName) // Hangfire ActivitySource
+        .AddConsoleExporter() // Any OTEL suportable exporter can be used here
+    );
+```
+
+That's it you application will start exporting Hangfire related traces within your application.
+
 Questions? Problems?
 ---------------------
 
