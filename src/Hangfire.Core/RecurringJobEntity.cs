@@ -20,6 +20,7 @@ using System.Linq;
 using Cronos;
 using Hangfire.Annotations;
 using Hangfire.Common;
+using Hangfire.Diagnostics;
 
 namespace Hangfire
 {
@@ -109,6 +110,16 @@ namespace Hangfire
             {
                 Error = error;
             }
+
+            if (recurringJob.TryGetValue("TraceParent", out var traceParent) && !String.IsNullOrWhiteSpace(traceParent))
+            {
+                TraceParent = traceParent;
+            }
+
+            if (recurringJob.TryGetValue("TraceState", out var traceState) && !String.IsNullOrWhiteSpace(traceState))
+            {
+                TraceState = traceState;
+            }
         }
 
         public string RecurringJobId { get; }
@@ -127,6 +138,8 @@ namespace Hangfire
         public int? Version { get; private set; }
         public int RetryAttempt { get; set; }
         public string Error { get; set; }
+        public string TraceParent { get; set; }
+        public string TraceState { get; set; }
 
         public void ScheduleNext(ITimeZoneResolver timeZoneResolver, DateTime from)
         {
@@ -263,6 +276,16 @@ namespace Hangfire
             if ((_recurringJob.TryGetValue("Error", out var error) ? error : null) != Error)
             {
                 result.Add("Error", Error ?? String.Empty);
+            }
+
+            if ((_recurringJob.TryGetValue(DiagnosticHeaders.TraceParent, out var traceParent) ? traceParent : null) != TraceParent)
+            {
+                result.Add(DiagnosticHeaders.TraceParent, TraceParent ?? String.Empty);
+            }
+
+            if ((_recurringJob.TryGetValue(DiagnosticHeaders.TraceState, out var traceState) ? traceState : null) != TraceState)
+            {
+                result.Add(DiagnosticHeaders.TraceState, TraceState ?? String.Empty);
             }
 
             var retryAttemptValue = RetryAttempt.ToString(CultureInfo.InvariantCulture);

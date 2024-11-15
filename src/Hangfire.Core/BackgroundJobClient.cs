@@ -15,9 +15,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Hangfire.Annotations;
 using Hangfire.Client;
 using Hangfire.Common;
+using Hangfire.Diagnostics;
 using Hangfire.States;
 
 namespace Hangfire
@@ -148,19 +150,36 @@ namespace Hangfire
             if (job == null) throw new ArgumentNullException(nameof(job));
             if (state == null) throw new ArgumentNullException(nameof(state));
 
+#if NETSTANDARD2_0
+            Activity activity = default;
+#endif
             try
             {
                 using (var connection = _storage.GetConnection())
                 {
                     var context = new CreateContext(_storage, connection, job, state, parameters);
+#if NETSTANDARD2_0
+                    activity = context.StartActivity();
+#endif
                     var backgroundJob = _factory.Create(context);
-
+#if NETSTANDARD2_0
+                    activity?.AddMessageId(backgroundJob?.Id);
+#endif                    
                     return backgroundJob?.Id;
                 }
             }
             catch (Exception ex) when (ex.IsCatchableExceptionType())
             {
+#if NETSTANDARD2_0
+                    activity?.AddExceptionEvent(ex);
+#endif                    
                 throw new BackgroundJobClientException("Background job creation failed. See inner exception for details.", ex);
+            }
+            finally
+            {
+#if NETSTANDARD2_0
+                    activity?.Dispose();
+#endif                    
             }
         }
 

@@ -21,6 +21,7 @@ using System.Linq;
 using System.Threading;
 using Hangfire.Annotations;
 using Hangfire.Common;
+using Hangfire.Diagnostics;
 using Hangfire.Logging;
 using Hangfire.Profiling;
 using Hangfire.States;
@@ -291,7 +292,9 @@ namespace Hangfire.Server
             out IReadOnlyDictionary<string, object> customData)
         {
             customData = null;
-
+#if NETSTANDARD2_0
+            Activity activity = null;
+#endif
             try
             {
                 if (backgroundJob == null)
@@ -313,7 +316,9 @@ namespace Hangfire.Server
                 using (var jobToken = new ServerJobCancellationToken(connection, backgroundJob.Id, context.ServerId, WorkerGuidCache.GetOrAdd(context.ExecutionId, static guid => guid.ToString()), context.StoppedToken))
                 {
                     var performContext = new PerformContext(context.Storage, connection, backgroundJob, jobToken, _profiler, context.ServerId, null);
-
+#if NETSTANDARD2_0
+                    activity = performContext.StartActivity();
+#endif
                     var latency = (DateTime.UtcNow - backgroundJob.CreatedAt).TotalMilliseconds;
                     var duration = Stopwatch.StartNew();
 
@@ -335,6 +340,9 @@ namespace Hangfire.Server
             }
             catch (JobPerformanceException ex)
             {
+#if NETSTANDARD2_0
+                activity?.AddExceptionEvent(ex);
+#endif               
                 return new FailedState(ex.InnerException, context.ServerId)
                 {
                     Reason = ex.Message
@@ -347,10 +355,19 @@ namespace Hangfire.Server
                     throw;
                 }
 
+#if NETSTANDARD2_0
+                activity?.AddExceptionEvent(ex);
+#endif               
                 return new FailedState(ex, context.ServerId)
                 {
                     Reason = "An exception occurred during processing of a background job."
                 };
+            }
+            finally
+            {
+#if NETSTANDARD2_0
+                activity?.Dispose();
+#endif               
             }
         }
     }

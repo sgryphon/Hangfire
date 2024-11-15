@@ -17,6 +17,7 @@ using System;
 using Hangfire.Annotations;
 using Hangfire.Client;
 using Hangfire.Common;
+using Hangfire.Diagnostics;
 using Hangfire.Logging;
 using Hangfire.Profiling;
 using Hangfire.Storage;
@@ -113,6 +114,13 @@ namespace Hangfire
             {
                 var now = _nowFactory();
                 var recurringJob = connection.GetOrCreateRecurringJob(recurringJobId);
+#pragma warning disable 618
+                recurringJob.Queue = options.QueueName;
+#pragma warning restore 618
+
+#if NETSTANDARD2_0
+                using var activity = recurringJob.StartActivity();
+#endif
                 var scheduleChanged = false;
 
                 recurringJob.Job = InvocationData.SerializeJob(job).SerializePayload();
@@ -129,9 +137,6 @@ namespace Hangfire
                     scheduleChanged = true;
                 }
 
-#pragma warning disable 618
-                recurringJob.Queue = options.QueueName;
-#pragma warning restore 618
                 recurringJob.MisfireHandling = options.MisfireHandling;
                 recurringJob.RetryAttempt = 0;
 

@@ -19,6 +19,7 @@ using System.Linq;
 using Hangfire.Annotations;
 using Hangfire.Client;
 using Hangfire.Common;
+using Hangfire.Diagnostics;
 using Hangfire.Logging;
 using Hangfire.Profiling;
 using Hangfire.States;
@@ -117,7 +118,9 @@ namespace Hangfire
             var context = new CreateContext(storage, connection, job, null, null, profiler, null);
             context.Parameters["RecurringJobId"] = recurringJob.RecurringJobId;
             context.Parameters["Time"] = JobHelper.ToTimestamp(now);
-
+#if NETSTANDARD2_0
+            context.PropagateCreationContext(recurringJob);
+#endif
             var backgroundJob = factory.Create(context);
 
             recurringJob.LastExecution = now;
