@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
@@ -392,6 +393,40 @@ namespace Hangfire.Core.Tests.Server
                 ctx.NewState is FailedState &&
                 ctx.DisableFilters == false)));
         }
+
+#if NET6_0_OR_GREATER
+        [Fact]
+        public void Execute_WhenActivityIsConfigured_CreationContextIsUsed()
+        {
+            // dotnet test -f net6.0 -l "console;verbosity=detailed" --filter "FullyQualifiedName=Hangfire.Core.Tests.Server.WorkerFacts.Execute_WhenActivityIsConfigured_CreationContextIsUsed"
+            using var listener = new ActivityListener
+            {
+                ShouldListenTo = _ => true,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStarted = activity => {},
+                ActivityStopped = activity => {}
+            };
+            ActivitySource.AddActivityListener(listener);
+
+            var expectedTraceId = "abcdef0123456789abcdef0123456789";
+            var traceParent = $"00-{expectedTraceId}-123456789abcdef0-01";
+
+            _connection.Setup(x => x.GetJobParameter(JobId, "TraceParent"))
+                .Returns(SerializationHelper.Serialize(traceParent));
+
+            string lastTraceId = null;
+            _performer.Setup(x => x.Perform(It.IsNotNull<PerformContext>()))
+                .Callback<PerformContext>(ctx => {
+                    lastTraceId = Activity.Current.TraceId.ToHexString();
+                });
+
+            var worker = CreateWorker();
+            worker.Execute(_context.Object);
+
+            // Assert
+            Assert.Equal(expectedTraceId, lastTraceId);
+        }
+#endif
 
         private Worker CreateWorker(int maxStateChangeAttempts = 10)
         {

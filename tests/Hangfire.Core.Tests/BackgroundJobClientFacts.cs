@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Hangfire.Client;
@@ -115,6 +116,32 @@ namespace Hangfire.Core.Tests
 
             Assert.Equal("some-job", id);
         }
+
+#if NET6_0_OR_GREATER
+        [Fact]
+        public void CreateJob_WhenActivityIsConfigured_CreationContextIsStored()
+        {
+            using var listener = new ActivityListener
+            {
+                ShouldListenTo = _ => true,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStarted = activity => {},
+                ActivityStopped = activity => {}
+            };
+            ActivitySource.AddActivityListener(listener);
+
+            var testActivity = new Activity("test");
+            testActivity.Start();
+            var expectedTraceId = testActivity.TraceId.ToHexString();
+
+            var client = CreateClient();
+
+            client.Create(_job, _state.Object);
+
+            _factory.Verify(x => x.Create(It.Is<CreateContext>(c =>
+                ((string)c.Parameters["TraceParent"]).Substring(3,32) == expectedTraceId)));
+        }
+#endif
 
         [Fact]
         public void CreateJob_WrapsOccurringExceptions_IntoItsOwnException()

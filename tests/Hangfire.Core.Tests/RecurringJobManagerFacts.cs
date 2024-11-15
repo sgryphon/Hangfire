@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Hangfire.Client;
 using Hangfire.Common;
@@ -602,6 +603,33 @@ namespace Hangfire.Core.Tests
             _transaction.Verify(x => x.AddToSet("recurring-jobs", _id, JobHelper.ToTimestamp(_now.AddMinutes(1))));
             _transaction.Verify(x => x.Commit());
         }
+
+#if NET6_0_OR_GREATER
+        [Fact]
+        public void AddOrUpdate_WhenActivityIsConfigured_CreationContextIsStored()
+        {
+            using var listener = new ActivityListener
+            {
+                ShouldListenTo = _ => true,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStarted = activity => {},
+                ActivityStopped = activity => {}
+            };
+            ActivitySource.AddActivityListener(listener);
+
+            var testActivity = new Activity("test");
+            testActivity.Start();
+            var expectedTraceId = testActivity.TraceId.ToHexString();
+
+            var manager = CreateManager();
+            manager.AddOrUpdate(_id, _job, _cronExpression);
+
+            _transaction.Verify(x => x.SetRangeInHash(
+                $"recurring-job:{_id}",
+                It.Is<Dictionary<string, string>>(rj => 
+                    rj["TraceParent"].Substring(3,32) == expectedTraceId)));
+        }
+#endif
 
         [Fact]
         public void Trigger_ThrowsAnException_WhenIdIsNull()
